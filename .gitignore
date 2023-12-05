@@ -1,5 +1,8 @@
 *~
 
-data/
-figures/
-results/
+data/*
+!data/.gitkeep
+figures/*
+!figures/.gitkeep
+results/*
+!results/.gitkeep
