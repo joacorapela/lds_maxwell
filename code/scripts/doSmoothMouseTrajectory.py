@@ -14,47 +14,54 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("filtering_params_filename", type=str,
                         help="filtering parameters filename")
-    parser.add_argument("--first_sample", type=int, default=200000,
-                        help="start position to smooth")
-    parser.add_argument("--number_samples", type=int, default=10000,
-                        help="number of samples to smooth")
-    parser.add_argument("--sample_rate", type=float, default=1,
-                        help="sample rate")
+#     parser.add_argument("--first_sample", type=int, default=200000,
+#                         help="start position to smooth")
+#     parser.add_argument("--number_samples", type=int, default=10000,
+#                         help="number of samples to smooth")
+#     parser.add_argument("--sample_rate", type=float, default=1,
+#                         help="sample rate")
     parser.add_argument("--filtering_params_section", type=str,
                         default="params",
                         help="section of ini file containing the filtering params")
-    parser.add_argument("--body_part", type=str, default="bodycenter",
-                        help="body part to track")
+#     parser.add_argument("--body_part", type=str, default="bodycenter",
+#                         help="body part to track")
     parser.add_argument("--data_filename", type=str,
-                        default="../../data/mouse_1120297_corrected_DLC_data.h5",
+                        # default="../../data/mouse_1120297_corrected_DLC_data.h5",
+                        default="../../data/mouse_1120297_Stage_2_cleaned_data.csv",
                         help="data filename")
-    parser.add_argument("--smoothed_data_filename_pattern", type=str,
-                        default="../../results/smoothed_results_firstSample{:d}_numberOfSamples{:d}.csv",
+    parser.add_argument("--smoothed_data_filename", type=str,
+                        default="../../results/mouse_1120297_Stage_2_cleaned_smoothed.csv",
                         help="smoothed data filename pattern")
     args = parser.parse_args()
 
     filtering_params_filename = args.filtering_params_filename
-    first_sample = args.first_sample
-    number_samples = args.number_samples
-    sample_rate = args.sample_rate
+#     first_sample = args.first_sample
+#     number_samples = args.number_samples
+#     sample_rate = args.sample_rate
     filtering_params_section = args.filtering_params_section
-    body_part = args.body_part
+#     body_part = args.body_part
     data_filename = args.data_filename
-    smoothed_data_filename_pattern = args.smoothed_data_filename_pattern
+    smoothed_data_filename = args.smoothed_data_filename
 
-    smoothed_data_filename = args.smoothed_data_filename_pattern.format(
-        first_sample, number_samples)
+#     smoothed_data_filename = args.smoothed_data_filename_pattern.format(
+#         first_sample, number_samples)
 
-    df = pd.read_hdf(data_filename)
-    scorer=df.columns.get_level_values(0)[0]
-    pos = np.transpose(df[scorer][body_part][["x", "y"]].to_numpy())
+#     df = pd.read_hdf(data_filename)
+#     scorer=df.columns.get_level_values(0)[0]
+#     pos = np.transpose(df[scorer][body_part][["x", "y"]].to_numpy())
+    df = pd.read_csv(data_filename)
+    pos = np.transpose(df.iloc[2:, 28:30].to_numpy()) # bodycenter x, y
+    pos = pos.astype(np.double)
+    time = df.iloc[2:, -1].to_numpy()
+    dt = np.diff(time).mean()
+#     number_samples = pos.shape[1]
 
-    if number_samples is None:
-        number_samples = pos.shape[1]
+#     if number_samples is None:
+#         number_samples = pos.shape[1]
 
-    pos = pos[:, first_sample:(first_sample+number_samples)]
+#     pos = pos[:, first_sample:(first_sample+number_samples)]
 
-    dt = 1.0/sample_rate
+#     dt = 1.0/sample_rate
 
     smoothing_params = configparser.ConfigParser()
     smoothing_params.read(filtering_params_filename)
@@ -114,7 +121,7 @@ def main(argv):
                                        xnn1=filterRes["xnn1"],
                                        Vnn1=filterRes["Vnn1"],
                                        m0=m0, V0=V0)
-    time = np.arange(first_sample*dt, (first_sample+number_samples)*dt, dt)
+#     time = np.arange(first_sample*dt, (first_sample+number_samples)*dt, dt)
     data={"time": time, "pos1": pos[0,:], "pos2": pos[1,:],
           "fpos1": filterRes["xnn"][0,0,:], "fpos2": filterRes["xnn"][3,0,:],
           "fvel1": filterRes["xnn"][1,0,:], "fvel2": filterRes["xnn"][4,0,:],
