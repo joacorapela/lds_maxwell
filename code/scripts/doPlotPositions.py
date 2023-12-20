@@ -13,9 +13,9 @@ def main(argv):
                         help="data filename")
     parser.add_argument("--body_part", type=str, default="bodycenter",
                         help="body part to track")
-    parser.add_argument("--first_sample", type=int, default=200000,
+    parser.add_argument("--first_sample", type=int, default=0,
                         help="first sample")
-    parser.add_argument("--number_samples", type=int, default=10000,
+    parser.add_argument("--number_samples", type=int, default=None,
                         help="number of samples to plot")
     parser.add_argument("--sample_rate", type=float, default=1,
                         help="sample rate")
