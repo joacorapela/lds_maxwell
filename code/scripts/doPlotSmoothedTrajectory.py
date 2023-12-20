@@ -61,19 +61,7 @@ def main(argv):
     slice_keep = slice(first_sample_plot,
                        first_sample_plot+number_samples_plot, 1)
     y = y[:,slice_keep]
-    smoothed_data["time"] = smoothed_data["time"][slice_keep]
-    smoothed_data["fpos1"] = smoothed_data["fpos1"][slice_keep]
-    smoothed_data["fpos2"] = smoothed_data["fpos2"][slice_keep]
-    smoothed_data["spos1"] = smoothed_data["spos1"][slice_keep]
-    smoothed_data["spos2"] = smoothed_data["spos2"][slice_keep]
-    smoothed_data["fvel1"] = smoothed_data["fvel1"][slice_keep]
-    smoothed_data["fvel2"] = smoothed_data["fvel2"][slice_keep]
-    smoothed_data["svel1"] = smoothed_data["svel1"][slice_keep]
-    smoothed_data["svel2"] = smoothed_data["svel2"][slice_keep]
-    smoothed_data["facc1"] = smoothed_data["facc1"][slice_keep]
-    smoothed_data["facc2"] = smoothed_data["facc2"][slice_keep]
-    smoothed_data["sacc1"] = smoothed_data["sacc1"][slice_keep]
-    smoothed_data["sacc2"] = smoothed_data["sacc2"][slice_keep]
+    smoothed_data = smoothed_data.iloc[slice_keep,:]
 
     y_vel_fd = np.zeros_like(y)
     y_vel_fd[:, 1:] = (y[:, 1:] - y[:, :-1])/dt
