@@ -1,5 +1,4 @@
 import sys
-import pdb
 import numpy as np
 import pandas as pd
 import datetime
@@ -8,10 +7,14 @@ import plotly.graph_objects as go
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--first_sample", type=int, default=200000,
+    parser.add_argument("--first_sample", type=int, default=0,
                         help="start position to smooth")
-    parser.add_argument("--number_samples", type=int, default=10000,
+    parser.add_argument("--number_samples", type=int, default=325910,
                         help="number of samples to smooth")
+    parser.add_argument("--first_sample_plot", type=int, default=50000,
+                        help="start position to plot")
+    parser.add_argument("--number_samples_plot", type=int, default=10000,
+                        help="number of samples to plot")
     parser.add_argument("--sample_rate", type=float, default=1,
                         help="sample rate")
     parser.add_argument("--variable", type=str, default="pos",
@@ -30,13 +33,15 @@ def main(argv):
                         default="../../results/smoothed_results_firstSample{:d}_numberOfSamples{:d}.csv",
                         help="smoothed data filename pattern")
     parser.add_argument("--fig_filename_pattern", type=str,
-                        default="../../figures/smoothed_results_{:s}_firstSample{:d}_numberOfSamples{:d}.{:s}",
+                        default="../../figures/smoothed_results_{:s}_firstSample{:d}_numberOfSamples{:d}_plotFromSample{:d}To{:d}.{:s}",
                         help="figure filename pattern")
 
     args = parser.parse_args()
 
     first_sample = args.first_sample
     number_samples = args.number_samples
+    first_sample_plot = args.first_sample_plot
+    number_samples_plot = args.number_samples_plot
     sample_rate = args.sample_rate
     variable = args.variable
     color_measured = args.color_measured
@@ -52,6 +57,23 @@ def main(argv):
     smoothed_data = pd.read_csv(smoothed_data_filename)
     y = np.transpose(smoothed_data[["pos1", "pos2"]].to_numpy())
     dt = 1.0/sample_rate
+
+    slice_keep = slice(first_sample_plot,
+                       first_sample_plot+number_samples_plot, 1)
+    y = y[:,slice_keep]
+    smoothed_data["time"] = smoothed_data["time"][slice_keep]
+    smoothed_data["fpos1"] = smoothed_data["fpos1"][slice_keep]
+    smoothed_data["fpos2"] = smoothed_data["fpos2"][slice_keep]
+    smoothed_data["spos1"] = smoothed_data["spos1"][slice_keep]
+    smoothed_data["spos2"] = smoothed_data["spos2"][slice_keep]
+    smoothed_data["fvel1"] = smoothed_data["fvel1"][slice_keep]
+    smoothed_data["fvel2"] = smoothed_data["fvel2"][slice_keep]
+    smoothed_data["svel1"] = smoothed_data["svel1"][slice_keep]
+    smoothed_data["svel2"] = smoothed_data["svel2"][slice_keep]
+    smoothed_data["facc1"] = smoothed_data["facc1"][slice_keep]
+    smoothed_data["facc2"] = smoothed_data["facc2"][slice_keep]
+    smoothed_data["sacc1"] = smoothed_data["sacc1"][slice_keep]
+    smoothed_data["sacc2"] = smoothed_data["sacc2"][slice_keep]
 
     y_vel_fd = np.zeros_like(y)
     y_vel_fd[:, 1:] = (y[:, 1:] - y[:, :-1])/dt
@@ -210,10 +232,16 @@ def main(argv):
         raise ValueError("variable={:s} is invalid. It should be: pos, vel, acc".format(variable))
 
     fig.write_image(fig_filename_pattern.format(variable, first_sample,
-                                                number_samples, "png"))
+                                                number_samples,
+                                                first_sample_plot,
+                                                number_samples_plot,
+                                                "png"))
     fig.write_html(fig_filename_pattern.format(variable, first_sample,
-                                               number_samples, "html"))
-    pdb.set_trace()
+                                               number_samples,
+                                                first_sample_plot,
+                                                number_samples_plot,
+                                               "html"))
+    breakpoint()
 
 if __name__ == "__main__":
     main(sys.argv)
