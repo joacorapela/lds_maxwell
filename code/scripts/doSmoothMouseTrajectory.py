@@ -6,17 +6,18 @@ import math
 import numpy as np
 import pandas as pd
 
-sys.path.append("../../../../lds_python/src/lds_python")
-import utils
+sys.path.append("../../../../lds_python/src/lds")
+import tracking.utils
 import inference
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument("filtering_params_filename", type=str,
+    parser.add_argument("--filtering_params_filename", type=str,
+                        default="../../metadata/00000010_smoothing.ini",
                         help="filtering parameters filename")
-    parser.add_argument("--first_sample", type=int, default=200000,
+    parser.add_argument("--first_sample", type=int, default=0,
                         help="start position to smooth")
-    parser.add_argument("--number_samples", type=int, default=10000,
+    parser.add_argument("--number_samples", type=int, default=None,
                         help="number of samples to smooth")
     parser.add_argument("--sample_rate", type=float, default=1,
                         help="sample rate")
@@ -42,15 +43,15 @@ def main(argv):
     data_filename = args.data_filename
     smoothed_data_filename_pattern = args.smoothed_data_filename_pattern
 
-    smoothed_data_filename = args.smoothed_data_filename_pattern.format(
-        first_sample, number_samples)
-
     df = pd.read_hdf(data_filename)
     scorer=df.columns.get_level_values(0)[0]
     pos = np.transpose(df[scorer][body_part][["x", "y"]].to_numpy())
 
     if number_samples is None:
         number_samples = pos.shape[1]
+
+    smoothed_data_filename = args.smoothed_data_filename_pattern.format(
+        first_sample, number_samples)
 
     pos = pos[:, first_sample:(first_sample+number_samples)]
 
@@ -104,7 +105,7 @@ def main(argv):
     m0 = np.array([pos[0, 0], 0, 0, pos[1, 0], 0, 0], dtype=np.double)
     # m0.shape = (len(m0), 1)
     V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
-    Q = utils.buildQfromQt_np(Qt=Qt, sigma_ax=sigma_a, sigma_ay=sigma_a)
+    Q = tracking.utils.buildQfromQt_np(Qt=Qt, sigma_ax=sigma_a, sigma_ay=sigma_a)
 
     filterRes = inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
                                                             m0=m0, V0=V0, Z=Z,
