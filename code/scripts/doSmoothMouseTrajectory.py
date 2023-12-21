@@ -6,21 +6,24 @@ import math
 import numpy as np
 import pandas as pd
 
-sys.path.append("../../../../lds_python/src/lds")
-import tracking.utils
-import inference
+sys.path.append("../../../../lds_python/src")
+import lds.tracking.utils
+import lds.inference
 
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--filtering_params_filename", type=str,
                         default="../../metadata/00000010_smoothing.ini",
                         help="filtering parameters filename")
-    parser.add_argument("--first_sample", type=int, default=0,
+    parser.add_argument("--first_sample", type=int, default=122000,
                         help="start position to smooth")
-    parser.add_argument("--number_samples", type=int, default=None,
+    parser.add_argument("--number_samples", type=int, default=200000,
                         help="number of samples to smooth")
-    parser.add_argument("--sample_rate", type=float, default=1,
+    parser.add_argument("--sample_rate", type=float, default=40,
                         help="sample rate")
+    parser.add_argument("--min_like", type=float, default=0.2,
+                        help=("x and y of samples with likelihood lower than "
+                              "min_like is set to nan"))
     parser.add_argument("--filtering_params_section", type=str,
                         default="params",
                         help="section of ini file containing the filtering params")
@@ -30,7 +33,7 @@ def main(argv):
                         default="../../data/mouse_1120297_corrected_DLC_data.h5",
                         help="data filename")
     parser.add_argument("--smoothed_data_filename_pattern", type=str,
-                        default="../../results/smoothed_results_firstSample{:d}_numberOfSamples{:d}.csv",
+                        default="../../results/smoothed_results_firstSample{:d}_numberOfSamples{:d}_minLike{:.02f}.csv",
                         help="smoothed data filename pattern")
     args = parser.parse_args()
 
@@ -38,6 +41,7 @@ def main(argv):
     first_sample = args.first_sample
     number_samples = args.number_samples
     sample_rate = args.sample_rate
+    min_like = args.min_like
     filtering_params_section = args.filtering_params_section
     body_part = args.body_part
     data_filename = args.data_filename
@@ -45,13 +49,19 @@ def main(argv):
 
     df = pd.read_hdf(data_filename)
     scorer=df.columns.get_level_values(0)[0]
-    pos = np.transpose(df[scorer][body_part][["x", "y"]].to_numpy())
+    body_part_df = df[scorer][body_part]
+    body_part_df.loc[body_part_df["likelihood"]<min_like, ("x", "y")] = np.nan
+    pos = np.transpose(body_part_df[["x", "y"]].to_numpy())
+
+    # the first sample should not be nan
+    while np.isnan(pos[0, first_sample]) or np.isnan(pos[1, first_sample]):
+        first_sample += 1
 
     if number_samples is None:
-        number_samples = pos.shape[1]
+        number_samples = pos.shape[1] - first_sample
 
     smoothed_data_filename = args.smoothed_data_filename_pattern.format(
-        first_sample, number_samples)
+        first_sample, number_samples, min_like)
 
     pos = pos[:, first_sample:(first_sample+number_samples)]
 
@@ -79,38 +89,16 @@ def main(argv):
     V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
     R = np.diag([sigma_x**2, sigma_y**2])
 
-    # Taken from the book
-    # barShalomEtAl01-estimationWithApplicationToTrackingAndNavigation.pdf
-    # section 6.3.3
-    # Eq. 6.3.3-2
-    B = np.array([[1, dt, .5*dt**2, 0, 0, 0],
-                   [0, 1, dt, 0, 0, 0],
-                   [0, 0, 1, 0, 0, 0],
-                   [0, 0, 0, 1, dt, .5*dt**2],
-                   [0, 0, 0, 0, 1, dt],
-                   [0, 0, 0, 0, 0, 1]],
-                  dtype=np.double)
-    Z = np.array([[1, 0, 0, 0, 0, 0],
-                   [0, 0, 0, 1, 0, 0]],
-                  dtype=np.double)
-    # Eq. 6.3.3-4
-    Qt = np.array([[dt**4/4, dt**3/2, dt**2/2, 0, 0, 0],
-                   [dt**3/2, dt**2,   dt,      0, 0, 0],
-                   [dt**2/2, dt,      1,       0, 0, 0],
-                   [0, 0, 0, dt**4/4, dt**3/2, dt**2/2],
-                   [0, 0, 0, dt**3/2, dt**2,   dt],
-                   [0, 0, 0, dt**2/2, dt,      1]],
-                  dtype=np.double)
-    R = np.diag([sigma_x**2, sigma_y**2])
+    B, Q, Z, R = lds.tracking.utils.getLDSmatricesForTracking(dt=dt,
+                                                              sigma_a=sigma_a,
+                                                              sigma_x=sigma_x,
+                                                              sigma_y=sigma_y)
     m0 = np.array([pos[0, 0], 0, 0, pos[1, 0], 0, 0], dtype=np.double)
-    # m0.shape = (len(m0), 1)
     V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
-    Q = tracking.utils.buildQfromQt_np(Qt=Qt, sigma_ax=sigma_a, sigma_ay=sigma_a)
-
-    filterRes = inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
+    filterRes = lds.inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
                                                             m0=m0, V0=V0, Z=Z,
                                                             R=R)
-    smoothRes = inference.smoothLDS_SS(B=B, xnn=filterRes["xnn"],
+    smoothRes = lds.inference.smoothLDS_SS(B=B, xnn=filterRes["xnn"],
                                        Vnn=filterRes["Vnn"],
                                        xnn1=filterRes["xnn1"],
                                        Vnn1=filterRes["Vnn1"],
@@ -125,6 +113,7 @@ def main(argv):
           "sacc1": smoothRes["xnN"][2,0,:], "sacc2": smoothRes["xnN"][5,0,:]}
     df = pd.DataFrame(data=data)
     df.to_csv(smoothed_data_filename)
+    print(f"Saved results to {smoothed_data_filename}")
     breakpoint()
 
 if __name__ == "__main__":
