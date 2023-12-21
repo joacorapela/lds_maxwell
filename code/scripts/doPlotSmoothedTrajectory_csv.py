@@ -12,7 +12,7 @@ def main(argv):
 #                         help="start position to smooth")
 #     parser.add_argument("--number_samples", type=int, default=10000,
 #                         help="number of samples to smooth")
-#     parser.add_argument("--sample_rate", type=float, default=1,
+#     parser.add_argument("--sample_rate", type=float, default=40,
 #                         help="sample rate")
     parser.add_argument("--variable", type=str, default="pos",
                         help="variable to plot: pos, vel, acc")

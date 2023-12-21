@@ -18,7 +18,7 @@ def main(argv):
 #                         help="first sample")
 #     parser.add_argument("--number_samples", type=int, default=10000,
 #                         help="number of samples to plot")
-#     parser.add_argument("--sample_rate", type=float, default=1,
+#     parser.add_argument("--sample_rate", type=float, default=40,
 #                         help="sample rate")
     parser.add_argument("--colorscale", type=str, default="Rainbow",
                         help="colorscale name")
