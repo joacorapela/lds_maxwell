@@ -1,8 +1,11 @@
 import sys
+import os
+import random
 import argparse
 import configparser
 import json
 import math
+import pickle
 import numpy as np
 import pandas as pd
 
@@ -14,7 +17,12 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--filtering_params_filename", type=str,
                         default="../../metadata/00000010_smoothing.ini",
+                        # default=None,
                         help="filtering parameters filename")
+    parser.add_argument("--estRes_filename", type=str,
+                        default=None,
+                        # default="../../results/14017016_estimation.pickle",
+                        help="estimation results data filename")
     parser.add_argument("--first_sample", type=int, default=122000,
                         help="start position to smooth")
     parser.add_argument("--number_samples", type=int, default=200000,
@@ -32,12 +40,16 @@ def main(argv):
     parser.add_argument("--data_filename", type=str,
                         default="../../data/mouse_1120297_corrected_DLC_data.h5",
                         help="data filename")
-    parser.add_argument("--smoothed_data_filename_pattern", type=str,
-                        default="../../results/smoothed_results_firstSample{:d}_numberOfSamples{:d}_minLike{:.02f}.csv",
-                        help="smoothed data filename pattern")
+    parser.add_argument("--smoothing_results_metadata_filename_pattern", type=str,
+                        default="../../results/{:08d}_smoothing_metada.ini",
+                        help="smoothed results metadata filename pattern")
+    parser.add_argument("--smoothing_results_filename_pattern", type=str,
+                        default="../../results/{:08d}_smoothing.csv",
+                        help="smoothing results filename pattern")
     args = parser.parse_args()
 
     filtering_params_filename = args.filtering_params_filename
+    estRes_filename = args.estRes_filename 
     first_sample = args.first_sample
     number_samples = args.number_samples
     sample_rate = args.sample_rate
@@ -45,7 +57,13 @@ def main(argv):
     filtering_params_section = args.filtering_params_section
     body_part = args.body_part
     data_filename = args.data_filename
-    smoothed_data_filename_pattern = args.smoothed_data_filename_pattern
+    smoothing_results_metadata_filename_pattern = args.smoothing_results_metadata_filename_pattern 
+    smoothing_results_filename_pattern = args.smoothing_results_filename_pattern
+
+    if filtering_params_filename is not None and \
+       estRes_filename is not None:
+        raise ValueError("filtering_params_filename and estRes_filename "
+                         "cannot both be non None")
 
     df = pd.read_hdf(data_filename)
     scorer=df.columns.get_level_values(0)[0]
@@ -60,44 +78,53 @@ def main(argv):
     if number_samples is None:
         number_samples = pos.shape[1] - first_sample
 
-    smoothed_data_filename = args.smoothed_data_filename_pattern.format(
-        first_sample, number_samples, min_like)
-
     pos = pos[:, first_sample:(first_sample+number_samples)]
 
     dt = 1.0/sample_rate
 
-    smoothing_params = configparser.ConfigParser()
-    smoothing_params.read(filtering_params_filename)
-    pos_x0 = float(smoothing_params[filtering_params_section]["pos_x0"])
-    pos_y0 = float(smoothing_params[filtering_params_section]["pos_y0"])
-    vel_x0 = float(smoothing_params[filtering_params_section]["vel_x0"])
-    vel_y0 = float(smoothing_params[filtering_params_section]["vel_x0"])
-    acc_x0 = float(smoothing_params[filtering_params_section]["acc_x0"])
-    acc_y0 = float(smoothing_params[filtering_params_section]["acc_x0"])
-    sigma_a = float(smoothing_params[filtering_params_section]["sigma_a"])
-    sigma_x = float(smoothing_params[filtering_params_section]["sigma_x"])
-    sigma_y = float(smoothing_params[filtering_params_section]["sigma_y"])
-    sqrt_diag_V0_value = float(smoothing_params[filtering_params_section]["sqrt_diag_V0_value"])
-    if math.isnan(pos_x0):
-        pos_x0 = pos[0, 0]
-    if math.isnan(pos_y0):
-        pos_y0 = pos[0, 1]
+    if filtering_params_filename is not None:
+        smoothing_params = configparser.ConfigParser()
+        smoothing_params.read(filtering_params_filename)
+        pos_x0 = float(smoothing_params[filtering_params_section]["pos_x0"])
+        pos_y0 = float(smoothing_params[filtering_params_section]["pos_y0"])
+        vel_x0 = float(smoothing_params[filtering_params_section]["vel_x0"])
+        vel_y0 = float(smoothing_params[filtering_params_section]["vel_x0"])
+        acc_x0 = float(smoothing_params[filtering_params_section]["acc_x0"])
+        acc_y0 = float(smoothing_params[filtering_params_section]["acc_x0"])
+        sigma_a = float(smoothing_params[filtering_params_section]["sigma_a"])
+        sigma_x = float(smoothing_params[filtering_params_section]["sigma_x"])
+        sigma_y = float(smoothing_params[filtering_params_section]["sigma_y"])
+        sqrt_diag_V0_value = float(smoothing_params[filtering_params_section]["sqrt_diag_V0_value"])
+        if math.isnan(pos_x0):
+            pos_x0 = pos[0, 0]
+        if math.isnan(pos_y0):
+            pos_y0 = pos[0, 1]
 
-    m0 = np.array([pos_x0, vel_x0, acc_x0, pos_y0, vel_y0, acc_y0],
-                  dtype=np.double)
-    V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
-    R = np.diag([sigma_x**2, sigma_y**2])
+        m0 = np.array([pos_x0, vel_x0, acc_x0, pos_y0, vel_y0, acc_y0],
+                      dtype=np.double)
+        V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
+        R = np.diag([sigma_x**2, sigma_y**2])
 
-    B, Q, Z, R = lds.tracking.utils.getLDSmatricesForTracking(dt=dt,
-                                                              sigma_a=sigma_a,
-                                                              sigma_x=sigma_x,
-                                                              sigma_y=sigma_y)
-    m0 = np.array([pos[0, 0], 0, 0, pos[1, 0], 0, 0], dtype=np.double)
-    V0 = np.diag(np.ones(len(m0))*sqrt_diag_V0_value**2)
+        B, Q, Z, R, _ = lds.tracking.utils.getLDSmatricesForTracking(
+            dt=dt, sigma_a=sigma_a, sigma_x=sigma_x, sigma_y=sigma_y)
+    elif estRes_filename is not None:
+        with open(estRes_filename, "rb") as f:
+            em_res = pickle.load(f)
+        sigma_a = em_res["estimates"]["sigma_a"]
+        m0 = em_res["estimates"]["m0"]
+        V0 = em_res["estimates"]["V0"]
+        R = em_res["estimates"]["R"]
+        sigma_x = R[0, 0]
+        sigma_y = R[1, 1]
+        B, Q, Z, _, _ = lds.tracking.utils.getLDSmatricesForTracking(
+            dt=dt, sigma_a=sigma_a, sigma_x=sigma_x, sigma_y=sigma_y)
+    else:
+        raise ValueError("one of filtering_params_filename and estRes_filename "
+                         "should be non None")
+
     filterRes = lds.inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
-                                                            m0=m0, V0=V0, Z=Z,
-                                                            R=R)
+                                                                m0=m0, V0=V0,
+                                                                Z=Z, R=R)
     smoothRes = lds.inference.smoothLDS_SS(B=B, xnn=filterRes["xnn"],
                                        Vnn=filterRes["Vnn"],
                                        xnn1=filterRes["xnn1"],
@@ -112,8 +139,41 @@ def main(argv):
           "svel1": smoothRes["xnN"][1,0,:], "svel2": smoothRes["xnN"][4,0,:],
           "sacc1": smoothRes["xnN"][2,0,:], "sacc2": smoothRes["xnN"][5,0,:]}
     df = pd.DataFrame(data=data)
-    df.to_csv(smoothed_data_filename)
-    print(f"Saved results to {smoothed_data_filename}")
+
+    # save results
+    smoothing_results_prefix_used = True
+    while smoothing_results_prefix_used:
+        smoothing_results_number = random.randint(0, 10**8)
+        smoothing_results_metadata_filename = \
+            smoothing_results_metadata_filename_pattern.format(smoothing_results_number)
+        if not os.path.exists(smoothing_results_metadata_filename):
+            smoothing_results_prefix_used = False
+    smoothing_results_filename = smoothing_results_filename_pattern.format(smoothing_results_number)
+
+    df.to_csv(smoothing_results_filename)
+    print(f"Saved results to {smoothing_results_filename}")
+
+    # save metadata
+    smoothingResConfig = configparser.ConfigParser()
+    if filtering_params_filename is not None:
+        smoothingResConfig["params"] = {"filtering_params_filename":
+                                        filtering_params_filename,
+                                        "first_sample": first_sample,
+                                        "number_samples": number_samples,
+                                        "min_like": min_like,
+                                        "body_part": body_part,
+                                       }
+    elif estRes_filename is not None:
+        smoothingResConfig["params"] = {"estRes_filename": estRes_filename,
+                                        "first_sample": first_sample,
+                                        "number_samples": number_samples,
+                                        "min_like": min_like,
+                                        "body_part": body_part,
+                                       }
+    else:
+        raise ValueError("one of filtering_params_filename and estRes_filename "
+                         "should be non None")
+
     breakpoint()
 
 if __name__ == "__main__":
