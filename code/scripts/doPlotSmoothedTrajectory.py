@@ -1,4 +1,5 @@
 import sys
+import pickle
 import numpy as np
 import pandas as pd
 import datetime
@@ -11,7 +12,9 @@ import lds.tracking.plotting
 def main(argv):
     parser = argparse.ArgumentParser()
     # parser.add_argument("--smoothing_results_number", type=int, default=27148369,
-    parser.add_argument("--smoothing_results_number", type=int, default=72370328,
+    # parser.add_argument("--smoothing_results_number", type=int, default=72370328,
+    # parser.add_argument("--smoothing_results_number", type=int, default=31620178,
+    parser.add_argument("--smoothing_results_number", type=int, default=41359254,
                         help="smoothing results numbe")
     parser.add_argument("--first_sample_plot", type=int, default=0,
                         help="start position to plot")
@@ -35,7 +38,7 @@ def main(argv):
     parser.add_argument("--symbol_y", type=str, default="circle-open",
                         help="color for y markers")
     parser.add_argument("--smoothing_results_filename_pattern", type=str,
-                        default="../../results/{:08d}_smoothing.csv",
+                        default="../../results/{:08d}_smoothing.pickle",
                         help="smoothed data filename pattern")
     parser.add_argument("--fig_filename_pattern", type=str,
                         default="../../figures/{:08d}_smoothing_{:s}_firstSamplePlotted{:d}_numberSamplesPlotted{:d}.{:s}",
@@ -59,17 +62,25 @@ def main(argv):
 
     smoothing_results_filename = args.smoothing_results_filename_pattern.format(
         smoothing_results_number)
-    smoothing_results = pd.read_csv(smoothing_results_filename)
-    y = np.transpose(smoothing_results[["pos1", "pos2"]].to_numpy())
+    with open(smoothing_results_filename, "rb") as f:
+        smoothing_results = pickle.load(f)
+    time = np.transpose(smoothing_results["time"])
+    measurements = smoothing_results["measurements"]
+    filter_res = smoothing_results["filter_res"]
+    smooth_res = smoothing_results["smooth_res"]
     dt = 1.0/sample_rate
 
     slice_keep = slice(first_sample_plot,
                        first_sample_plot+number_samples_plot, 1)
-    y = y[:,slice_keep]
-    smoothing_results = smoothing_results.iloc[slice_keep,:]
+    time = time[slice_keep]
+    measurements = measurements[slice_keep, :]
+    filtered_means = filter_res["xnn"][:, 0, slice_keep]
+    filtered_stds = np.transpose(np.sqrt(np.diagonal(a=filter_res["Vnn"], axis1=0, axis2=1)))[:, slice_keep]
+    smoothed_means = smooth_res["xnN"][:, 0, slice_keep]
+    smoothed_stds = np.transpose(np.sqrt(np.diagonal(a=smooth_res["VnN"], axis1=0, axis2=1)))[:, slice_keep]
 
-    y_vel_fd = np.zeros_like(y)
-    y_vel_fd[:, 1:] = (y[:, 1:] - y[:, :-1])/dt
+    y_vel_fd = np.zeros_like(measurements)
+    y_vel_fd[:, 1:] = (measurements[:, 1:] - measurements[:, :-1])/dt
     y_vel_fd[:, 0] = y_vel_fd[:, 1]
     y_acc_fd = np.zeros_like(y_vel_fd)
     y_acc_fd[:, 1:] = (y_vel_fd[:, 1:] - y_vel_fd[:, :-1])/dt
@@ -77,46 +88,40 @@ def main(argv):
 
     if variable == "pos2D":
         fig = lds.tracking.plotting.get_fig_mfs_positions_2D(
-            time=smoothing_results["time"],
-            measured_x=y[0, :],
-            measured_y=y[1, :],
-            filtered_x=smoothing_results["fpos1"],
-            filtered_y=smoothing_results["fpos2"],
-            smoothed_x=smoothing_results["spos1"],
-            smoothed_y=smoothing_results["spos2"],
+            time=time,
+            measurements=measurements,
+            filtered_means=filtered_means[(0, 3), :],
+            smoothed_means=smoothed_means[(0, 3), :],
         )
     elif variable == "pos":
         fig = lds.tracking.plotting.get_fig_mfdfs_kinematics_1D(
-            time=smoothing_results["time"],
+            time=time,
             yaxis_title="position (pixels)",
-            measured_x=y[0, :],
-            measured_y=y[1, :],
-            filtered_x=smoothing_results["fpos1"],
-            filtered_y=smoothing_results["fpos2"],
-            smoothed_x=smoothing_results["spos1"],
-            smoothed_y=smoothing_results["spos2"],
+            measurements=measurements,
+            filtered_means=filtered_means[(0, 3), :],
+            filtered_stds=filtered_stds[(0, 3), :],
+            smoothed_means=smoothed_means[(0, 3), :],
+            smoothed_stds=smoothed_stds[(0, 3), :],
         )
     elif variable == "vel":
         fig = lds.tracking.plotting.get_fig_mfdfs_kinematics_1D(
-            time=smoothing_results["time"],
+            time=time,
             yaxis_title="velocity (pixels/sec)",
-            fd_x=y_vel_fd[0, :],
-            fd_y=y_vel_fd[1, :],
-            filtered_x=smoothing_results["fvel1"],
-            filtered_y=smoothing_results["fvel2"],
-            smoothed_x=smoothing_results["svel1"],
-            smoothed_y=smoothing_results["svel2"],
+            finite_differences=y_vel_fd,
+            filtered_means=filtered_means[(1, 4), :],
+            filtered_stds=filtered_stds[(1, 4), :],
+            smoothed_means=smoothed_means[(1, 4), :],
+            smoothed_stds=smoothed_stds[(1, 4), :],
         )
     elif variable == "acc":
         fig = lds.tracking.plotting.get_fig_mfdfs_kinematics_1D(
-            time=smoothing_results["time"],
+            time=time,
             yaxis_title="acceleration pixels/sec^2",
-            fd_x=y_acc_fd[0, :],
-            fd_y=y_acc_fd[1, :],
-            filtered_x=smoothing_results["facc1"],
-            filtered_y=smoothing_results["facc2"],
-            smoothed_x=smoothing_results["sacc1"],
-            smoothed_y=smoothing_results["sacc2"],
+            finite_differences=y_acc_fd,
+            filtered_means=filtered_means[(2, 5), :],
+            filtered_stds=filtered_stds[(2, 5), :],
+            smoothed_means=smoothed_means[(2, 5), :],
+            smoothed_stds=smoothed_stds[(2, 5), :],
         )
     else:
         raise ValueError("variable={:s} is invalid. It should be: pos2D, pos, vel, acc".format(variable))
