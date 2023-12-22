@@ -44,7 +44,7 @@ def main(argv):
                         default="../../results/{:08d}_smoothing_metada.ini",
                         help="smoothed results metadata filename pattern")
     parser.add_argument("--smoothing_results_filename_pattern", type=str,
-                        default="../../results/{:08d}_smoothing.csv",
+                        default="../../results/{:08d}_smoothing.pickle",
                         help="smoothing results filename pattern")
     args = parser.parse_args()
 
@@ -122,23 +122,17 @@ def main(argv):
         raise ValueError("one of filtering_params_filename and estRes_filename "
                          "should be non None")
 
-    filterRes = lds.inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
+    filter_res = lds.inference.filterLDS_SS_withMissingValues_np(y=pos, B=B, Q=Q,
                                                                 m0=m0, V0=V0,
                                                                 Z=Z, R=R)
-    smoothRes = lds.inference.smoothLDS_SS(B=B, xnn=filterRes["xnn"],
-                                       Vnn=filterRes["Vnn"],
-                                       xnn1=filterRes["xnn1"],
-                                       Vnn1=filterRes["Vnn1"],
-                                       m0=m0, V0=V0)
+    smooth_res = lds.inference.smoothLDS_SS(B=B, xnn=filter_res["xnn"],
+                                            Vnn=filter_res["Vnn"],
+                                            xnn1=filter_res["xnn1"],
+                                            Vnn1=filter_res["Vnn1"],
+                                            m0=m0, V0=V0)
     time = np.arange(first_sample*dt, (first_sample+number_samples)*dt, dt)
-    data={"time": time, "pos1": pos[0,:], "pos2": pos[1,:],
-          "fpos1": filterRes["xnn"][0,0,:], "fpos2": filterRes["xnn"][3,0,:],
-          "fvel1": filterRes["xnn"][1,0,:], "fvel2": filterRes["xnn"][4,0,:],
-          "facc1": filterRes["xnn"][2,0,:], "facc2": filterRes["xnn"][5,0,:],
-          "spos1": smoothRes["xnN"][0,0,:], "spos2": smoothRes["xnN"][3,0,:],
-          "svel1": smoothRes["xnN"][1,0,:], "svel2": smoothRes["xnN"][4,0,:],
-          "sacc1": smoothRes["xnN"][2,0,:], "sacc2": smoothRes["xnN"][5,0,:]}
-    df = pd.DataFrame(data=data)
+    results = {"time": time, "measurements": pos, "filter_res": filter_res,
+               "smooth_res": smooth_res}
 
     # save results
     smoothing_results_prefix_used = True
@@ -150,7 +144,8 @@ def main(argv):
             smoothing_results_prefix_used = False
     smoothing_results_filename = smoothing_results_filename_pattern.format(smoothing_results_number)
 
-    df.to_csv(smoothing_results_filename)
+    with open(smoothing_results_filename, "wb") as f:
+        pickle.dump(results, f)
     print(f"Saved results to {smoothing_results_filename}")
 
     # save metadata
@@ -173,6 +168,9 @@ def main(argv):
     else:
         raise ValueError("one of filtering_params_filename and estRes_filename "
                          "should be non None")
+
+    with open(smoothing_results_metadata_filename, "w") as f:
+        smoothingResConfig.write(f)
 
     breakpoint()
 
